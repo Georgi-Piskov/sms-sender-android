@@ -1,0 +1,178 @@
+{
+  "name": "Rodopi Dent - Send SMS (Android)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-sms-android",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-880, 112],
+      "webhookId": "send-sms-android"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body;\n\nif (!body.phone || (!body.message && !body.template)) {\n  throw new Error('Phone and message/template are required');\n}\n\nlet phone = body.phone.replace(/\\s+/g, '').replace(/[^0-9+]/g, '');\n\nif (phone.startsWith('0')) {\n  phone = '+359' + phone.substring(1);\n} else if (!phone.startsWith('+')) {\n  phone = '+359' + phone;\n}\n\nconst templates = {\n  'booking_received': `Родопи Дент: Заявката ви за час на {date} в {time} е получена и чака одобрение.`,\n  'booking_confirmed': `Родопи Дент: Часът ви е ПОТВЪРДЕН! {date} в {time}. Очакваме ви!`,\n  'booking_rejected': `Родопи Дент: За съжаление не можем да потвърдим часа ви за {date} в {time}.`,\n  'reminder': `Родопи Дент: Напомняне - имате час утре ({date}) в {time}. Очакваме ви!`\n};\n\nlet message = body.message || '';\nif (body.template && templates[body.template]) {\n  message = templates[body.template];\n  if (body.date) message = message.replace(/{date}/g, body.date);\n  if (body.time) message = message.replace(/{time}/g, body.time);\n  if (body.duration) message = message.replace(/{duration}/g, body.duration);\n}\n\nreturn [{ json: { phone, message, template: body.template || 'custom' } }];"
+      },
+      "id": "prepare-sms",
+      "name": "Prepare SMS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-656, 112]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fcm.googleapis.com/v1/projects/YOUR_PROJECT_ID/messages:send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleServiceAccount",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"token\": \"YOUR_FCM_TOKEN_HERE\",\n    \"data\": {\n      \"phone\": \"{{ $json.phone }}\",\n      \"message\": \"{{ $json.message }}\"\n    }\n  }\n}",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      },
+      "id": "send-fcm",
+      "name": "Send FCM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-432, 112]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.name }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-success",
+      "name": "SMS Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [-208, 112]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'SMS изпратен успешно', phone: $('Prepare SMS').item.json.phone }) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [16, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, error: 'SMS не можа да бъде изпратен', details: $json }) }}",
+        "options": {
+          "responseCode": "500",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [16, 224]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare SMS": {
+      "main": [
+        [
+          {
+            "node": "Send FCM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send FCM": {
+      "main": [
+        [
+          {
+            "node": "SMS Sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Sent?": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
