@@ -20,14 +20,14 @@ jobs:
     
     - name: Create google-services.json
       run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
-    
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.5'
     
     - name: Build Debug APK
-      run: |
-        chmod +x ./gradlew
-        ./gradlew assembleDebug
+      run: gradle assembleDebug
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
